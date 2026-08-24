@@ -1,0 +1,164 @@
+#include <stdio.h>
+#include <stdlib.h>
+typedef struct {
+    int weight;
+    int index;
+    long long freeTime; // Only used when inside the busy heap
+} Server;
+typedef struct {
+    Server *data;
+    int size;
+} FreeHeap;
+typedef struct {
+    Server *data;
+    int size;
+} BusyHeap;
+
+// Swapping servers
+void swap(Server *a, Server *b) {
+    Server temp = *a;
+    *a = *b;
+    *b = temp;
+}
+void freeHeapPush(FreeHeap *heap, Server s) {
+    heap->data[heap->size] = s;
+    int i = heap->size;
+    heap->size++;
+    while (i > 0) {
+        int p = (i - 1) / 2;
+        if (heap->data[i].weight < heap->data[p].weight || 
+           (heap->data[i].weight == heap->data[p].weight && heap->data[i].index < heap->data[p].index)) {
+            swap(&heap->data[i], &heap->data[p]);
+            i = p;
+        } else {
+            break;
+        }
+    }
+}
+
+Server freeHeapPop(FreeHeap *heap) {
+    Server root = heap->data[0];
+    heap->size--;
+    heap->data[0] = heap->data[heap->size];
+    
+    int i = 0;
+    while (2 * i + 1 < heap->size) {
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+        int smallest = left;
+        
+        if (right < heap->size && (heap->data[right].weight < heap->data[left].weight || 
+           (heap->data[right].weight == heap->data[left].weight && heap->data[right].index < heap->data[left].index))) {
+            smallest = right;
+        }
+        
+        if (heap->data[smallest].weight < heap->data[i].weight || 
+           (heap->data[smallest].weight == heap->data[i].weight && heap->data[smallest].index < heap->data[i].index)) {
+            swap(&heap->data[i], &heap->data[smallest]);
+            i = smallest;
+        } else {
+            break;
+        }
+    }
+    return root;
+}
+
+
+void busyHeapPush(BusyHeap *heap, Server s) {
+    heap->data[heap->size] = s;
+    int i = heap->size;
+    heap->size++;
+    while (i > 0) {
+        int p = (i - 1) / 2;
+        if (heap->data[i].freeTime < heap->data[p].freeTime ||
+           (heap->data[i].freeTime == heap->data[p].freeTime && heap->data[i].weight < heap->data[p].weight) ||
+           (heap->data[i].freeTime == heap->data[p].freeTime && heap->data[i].weight == heap->data[p].weight && heap->data[i].index < heap->data[p].index)) {
+            swap(&heap->data[i], &heap->data[p]);
+            i = p;
+        } else {
+            break;
+        }
+    }
+}
+
+Server busyHeapPop(BusyHeap *heap) {
+    Server root = heap->data[0];
+    heap->size--;
+    heap->data[0] = heap->data[heap->size];
+    
+    int i = 0;
+    while (2 * i + 1 < heap->size) {
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+        int smallest = left;
+        
+        if (right < heap->size) {
+            if (heap->data[right].freeTime < heap->data[left].freeTime ||
+               (heap->data[right].freeTime == heap->data[left].freeTime && heap->data[right].weight < heap->data[left].weight) ||
+               (heap->data[right].freeTime == heap->data[left].freeTime && heap->data[right].weight == heap->data[left].weight && heap->data[right].index < heap->data[left].index)) {
+                smallest = right;
+            }
+        }
+        
+        if (heap->data[smallest].freeTime < heap->data[i].freeTime ||
+           (heap->data[smallest].freeTime == heap->data[i].freeTime && heap->data[smallest].weight < heap->data[i].weight) ||
+           (heap->data[smallest].freeTime == heap->data[i].freeTime && heap->data[smallest].weight == heap->data[i].weight && heap->data[smallest].index < heap->data[i].index)) {
+            swap(&heap->data[i], &heap->data[smallest]);
+            i = smallest;
+        } else {
+            break;
+        }
+    }
+    return root;
+}
+
+int* assignTasks(int* servers, int serversSize, int* tasks, int tasksSize, int* returnSize) {
+    *returnSize = tasksSize;
+    int *ans = (int *)malloc(tasksSize * sizeof(int));
+    FreeHeap freeHeap;
+    freeHeap.data = (Server *)malloc(serversSize * sizeof(Server));
+    freeHeap.size = 0;
+    
+    BusyHeap busyHeap;
+    busyHeap.data = (Server *)malloc(serversSize * sizeof(Server));
+    busyHeap.size = 0;
+  
+    for (int i = 0; i < serversSize; i++) {
+        Server s = {servers[i], i, 0};
+        freeHeapPush(&freeHeap, s);
+    }
+    
+    long long currentTime = 0;
+    for (int j = 0; j < tasksSize; j++) {
+     
+        if (currentTime < j) {
+            currentTime = j;
+        }
+        
+        while (busyHeap.size > 0 && busyHeap.data[0].freeTime <= currentTime) {
+            Server finished = busyHeapPop(&busyHeap);
+            freeHeapPush(&freeHeap, finished);
+        }
+      
+        if (freeHeap.size == 0) {
+            currentTime = busyHeap.data[0].freeTime;
+            while (busyHeap.size > 0 && busyHeap.data[0].freeTime <= currentTime) {
+                Server finished = busyHeapPop(&busyHeap);
+                freeHeapPush(&freeHeap, finished);
+            }
+        }
+    
+        Server optimalServer = freeHeapPop(&freeHeap);
+        ans[j] = optimalServer.index;
+        
+        // Update its execution end timeline and slide into busy heap
+        optimalServer.freeTime = currentTime + tasks[j];
+        busyHeapPush(&busyHeap, optimalServer);
+    }
+    
+    // Free up operational dynamic memory allocation
+    free(freeHeap.data);
+    free(busyHeap.data);
+    
+    return ans;
+}
