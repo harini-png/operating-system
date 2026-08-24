@@ -1,0 +1,55 @@
+#include <mutex>
+#include <condition_variable>
+#include <functional>
+
+class DiningPhilosophers {
+private:
+    std::mutex mtx;
+    std::condition_variable cv;
+  
+    int fork_state[5]; 
+
+public:
+    DiningPhilosophers() {
+       
+        for (int i = 0; i < 5; ++i) {
+            fork_state[i] = 0;
+        }
+    }
+
+    void wantsToEat(int philosopher,
+                    std::function<void()> pickLeftFork,
+                    std::function<void()> pickRightFork,
+                    std::function<void()> eat,
+                    std::function<void()> putLeftFork,
+                    std::function<void()> putRightFork) {
+        
+        int left_fork = philosopher;
+        int right_fork = (philosopher + 1) % 5;
+
+        {
+            std::unique_lock<std::mutex> lock(mtx);
+           
+            cv.wait(lock, [this, left_fork, right_fork]() {
+                return fork_state[left_fork] == 0 && fork_state[right_fork] == 0;
+            });
+            fork_state[left_fork] = 1;
+            fork_state[right_fork] = 1;
+        }
+
+        pickLeftFork();
+        pickRightFork();
+        eat();
+        putLeftFork();
+        putRightFork();
+
+       
+        {
+            std::unique_lock<std::mutex> lock(mtx);
+            fork_state[left_fork] = 0;
+            fork_state[right_fork] = 0;
+
+            cv.notify_all();
+        }
+    }
+};
