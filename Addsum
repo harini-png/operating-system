@@ -1,0 +1,66 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+// Structure for hash table entries
+struct HashEntry {
+    int key;   // The number from the array
+    int value; // Its index in the array
+};
+
+// Simple hash function for handling negative numbers
+int hash(int key, int size) {
+    long long k = key;
+    int h = k % size;
+    return h < 0 ? h + size : h;
+}
+
+/**
+ * Note: The returned array must be malloced, assume caller calls free().
+ */
+int* twoSum(int* nums, int numsSize, int target, int* returnSize) {
+    // 1. Allocate memory for the output array
+    *returnSize = 2;
+    int* result = (int*)malloc(2 * sizeof(int));
+    
+    // 2. Create a dynamic hash table with size proportional to inputs
+    int hashSize = numsSize * 2;
+    struct HashEntry* hashTable = (struct HashEntry*)calloc(hashSize, sizeof(struct HashEntry));
+    
+    // Track occupied buckets (0 = empty, 1 = filled)
+    // Using a separate array to handle '0' values properly
+    int* occupied = (int*)calloc(hashSize, sizeof(int));
+
+    for (int i = 0; i < numsSize; i++) {
+        int complement = target - nums[i];
+        int compIndex = hash(complement, hashSize);
+
+        // Linear probing to search for the complement
+        while (occupied[compIndex]) {
+            if (hashTable[compIndex].key == complement) {
+                result[0] = hashTable[compIndex].value;
+                result[1] = i;
+                
+                // Clean up allocated memory
+                free(hashTable);
+                free(occupied);
+                return result;
+            }
+            compIndex = (compIndex + 1) % hashSize;
+        }
+
+        // If complement not found, insert current number into hash table
+        int currIndex = hash(nums[i], hashSize);
+        while (occupied[currIndex]) {
+            currIndex = (currIndex + 1) % hashSize;
+        }
+        hashTable[currIndex].key = nums[i];
+        hashTable[currIndex].value = i;
+        occupied[currIndex] = 1;
+    }
+
+    // Clean up if no solution is found (though the problem guarantees one)
+    free(hashTable);
+    free(occupied);
+    *returnSize = 0;
+    return NULL;
+}
