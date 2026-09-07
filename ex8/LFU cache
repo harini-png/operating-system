@@ -1,0 +1,170 @@
+#include <stdlib.h>
+#include <stdbool.h>
+
+// Doubly Linked List Node for Cache Entries
+typedef struct Node {
+    int key;
+    int value;
+    int freq;
+    struct Node* prev;
+    struct Node* next;
+} Node;
+
+// Doubly Linked List structure for tracking recency within a single frequency bucket
+typedef struct DList {
+    Node* head; // Sentinel dummy head
+    Node* tail; // Sentinel dummy tail
+} DList;
+
+// LFU Cache structure
+typedef struct {
+    int capacity;
+    int size;
+    int min_freq;      // Global tracker for the lowest active frequency bucket
+    Node** nodeMap;    // Array map for key -> Node pointer (Key size: 0 to 100000)
+    DList** freqMap;   // Array map for frequency -> DList pointer (Max frequency <= max calls)
+} LFUCache;
+
+// Helper: Initialize a new Doubly Linked List with sentinel markers
+DList* createDList() {
+    DList* list = (DList*)malloc(sizeof(DList));
+    list->head = (Node*)malloc(sizeof(Node));
+    list->tail = (Node*)malloc(sizeof(Node));
+    list->head->next = list->tail;
+    list->tail->prev = list->head;
+    list->head->prev = NULL;
+    list->tail->next = NULL;
+    return list;
+}
+
+// Helper: Remove an element node from its current Doubly Linked List positions
+void removeNode(Node* node) {
+    node->prev->next = node->next;
+    node->next->prev = node->prev;
+}
+
+// Helper: Insert a node right before the tail sentinel (making it the Most Recently Used)
+void addToTail(DList* list, Node* node) {
+    node->prev = list->tail->prev;
+    node->next = list->tail;
+    list->tail->prev->next = node;
+    list->tail->prev = node;
+}
+
+// Helper: Check if a frequency list bucket contains zero active entries
+bool isDListEmpty(DList* list) {
+    return list->head->next == list->tail;
+}
+
+// Initialize the LFU cache structure
+LFUCache* lFUCacheCreate(int capacity) {
+    LFUCache* obj = (LFUCache*)malloc(sizeof(LFUCache));
+    obj->capacity = capacity;
+    obj->size = 0;
+    obj->min_freq = 0;
+    
+    // Allocate Direct Lookup Tables up to maximum constraints
+    obj->nodeMap = (Node**)calloc(100001, sizeof(Node*));
+    obj->freqMap = (DList**)calloc(200005, sizeof(DList*)); // Max 2*10^5 calls means max frequency <= 200005
+    
+    return obj;
+}
+
+// Helper: Increment frequency of an element and update tracking balances
+void updateFrequency(LFUCache* obj, Node* node) {
+    int old_freq = node->freq;
+    int new_freq = old_freq + 1;
+    node->freq = new_freq;
+    
+    // 1. Decouple from its previous frequency bucket list
+    removeNode(node);
+    
+    // 2. If the old frequency bucket is now empty and was the min_freq, advance min_freq
+    if (obj->min_freq == old_freq && isDListEmpty(obj->freqMap[old_freq])) {
+        obj->min_freq++;
+    }
+    
+    // 3. Ensure the target frequency bucket list is initialized
+    if (obj->freqMap[new_freq] == NULL) {
+        obj->freqMap[new_freq] = createDList();
+    }
+    
+    // 4. Attach node onto the target frequency bucket's tail position
+    addToTail(obj->freqMap[new_freq], node);
+}
+
+// Fetch elements out of LFU Cache infrastructure
+int lFUCacheGet(LFUCache* obj, int key) {
+    if (obj->capacity == 0) return -1;
+    
+    Node* node = obj->nodeMap[key];
+    if (node == NULL) {
+        return -1;
+    }
+    
+    // Advance element frequency bucket placement
+    updateFrequency(obj, node);
+    return node->value;
+}
+
+// Insert / Modify elements into LFU cache structure
+void lFUCachePut(LFUCache* obj, int key, int value) {
+    if (obj->capacity == 0) return;
+    
+    Node* node = obj->nodeMap[key];
+    if (node != NULL) {
+        // Key exists: update value and increment frequency
+        node->value = value;
+        updateFrequency(obj, node);
+    } else {
+        // Key does not exist: eviction path if capacity limit is reached
+        if (obj->size >= obj->capacity) {
+            // Pick eviction candidate: Least Recently Used element from the minimum frequency bucket
+            DList* minList = obj->freqMap[obj->min_freq];
+            Node* evictionCandidate = minList->head->next; // Element right after dummy head
+            
+            // Wipe metadata dependencies out of lookup map
+            obj->nodeMap[evictionCandidate->key] = NULL;
+            removeNode(evictionCandidate);
+            free(evictionCandidate);
+            
+            obj->size--;
+        }
+        
+        // Construct a fresh storage element node
+        Node* newNode = (Node*)malloc(sizeof(Node));
+        newNode->key = key;
+        newNode->value = value;
+        newNode->freq = 1;
+        
+        obj->nodeMap[key] = newNode;
+        obj->min_freq = 1; // Any brand-new element starts at a baseline frequency of 1
+        
+        if (obj->freqMap[1] == NULL) {
+            obj->freqMap[1] = createDList();
+        }
+        
+        addToTail(obj->freqMap[1], newNode);
+        obj->size++;
+    }
+}
+
+// Deep clean allocated structure memory blocks to prevent platform leaks
+void lFUCacheFree(LFUCache* obj) {
+    for (int i = 0; i <= 100000; i++) {
+        if (obj->nodeMap[i] != NULL) {
+            free(obj->nodeMap[i]);
+        }
+    }
+    free(obj->nodeMap);
+    
+    for (int i = 0; i < 200005; i++) {
+        if (obj->freqMap[i] != NULL) {
+            free(obj->freqMap[i]->head);
+            free(obj->freqMap[i]->tail);
+            free(obj->freqMap[i]);
+        }
+    }
+    free(obj->freqMap);
+    free(obj);
+}
