@@ -1,0 +1,58 @@
+#include <pthread.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <semaphore.h>
+
+// Explicitly declare LeetCode's background testing routines to fix compile error
+void printFirst();
+void printSecond();
+void printThird();
+
+typedef struct {
+    sem_t sem1; // Controls second() execution
+    sem_t sem2; // Controls third() execution
+} Foo;
+
+Foo* fooCreate() {
+    Foo* obj = (Foo*) malloc(sizeof(Foo));
+    
+    // Initialize semaphores to 0 (threads must wait until post is called)
+    sem_init(&obj->sem1, 0, 0);
+    sem_init(&obj->sem2, 0, 0);
+    
+    return obj;
+}
+
+void first(Foo* obj) {
+    // printFirst() outputs "first". Do not change or remove this line.
+    printFirst();
+    
+    // Unlock the semaphore for second()
+    sem_post(&obj->sem1);
+}
+
+void second(Foo* obj) {
+    // Wait until first() finishes and posts to sem1
+    sem_wait(&obj->sem1);
+    
+    // printSecond() outputs "second". Do not change or remove this line.
+    printSecond();
+    
+    // Unlock the semaphore for third()
+    sem_post(&obj->sem2);
+}
+
+void third(Foo* obj) {
+    // Wait until second() finishes and posts to sem2
+    sem_wait(&obj->sem2);
+    
+    // printThird() outputs "third". Do not change or remove this line.
+    printThird();
+}
+
+void fooFree(Foo* obj) {
+    // Destroy semaphores to clean up context memory safely
+    sem_destroy(&obj->sem1);
+    sem_destroy(&obj->sem2);
+    free(obj);
+}
