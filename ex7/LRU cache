@@ -1,0 +1,117 @@
+#include <stdlib.h>
+
+// Doubly Linked List Node structure
+typedef struct Node {
+    int key;
+    int value;
+    struct Node* prev;
+    struct Node* next;
+} Node;
+
+// LRU Cache structure
+typedef struct {
+    int capacity;
+    int size;
+    Node* head; // Dummy head
+    Node* tail; // Dummy tail
+    Node* hashMap[10001]; // Direct lookup array for keys 0 to 10000
+} LRUCache;
+
+// Helper function to create a new doubly linked list node
+Node* createNode(int key, int value) {
+    Node* node = (Node*)malloc(sizeof(Node));
+    node->key = key;
+    node->value = value;
+    node->prev = NULL;
+    node->next = NULL;
+    return node;
+}
+
+// Helper function to remove a node from its current position in the list
+void removeNode(Node* node) {
+    node->prev->next = node->next;
+    node->next->prev = node->prev;
+}
+
+// Helper function to add a node right after the dummy head (Most Recently Used position)
+void addToHead(LRUCache* obj, Node* node) {
+    node->next = obj->head->next;
+    node->next->prev = node;
+    obj->head->next = node;
+    node->prev = obj->head;
+}
+
+// Helper function to move an existing node to the head (marking it as recently used)
+void moveToHead(LRUCache* obj, Node* node) {
+    removeNode(node);
+    addToHead(obj, node);
+}
+
+// Initialize the LRU Cache
+LRUCache* lRUCacheCreate(int capacity) {
+    LRUCache* obj = (LRUCache*)malloc(sizeof(LRUCache));
+    obj->capacity = capacity;
+    obj->size = 0;
+    
+    // Create dummy head and tail nodes to avoid edge cases
+    obj->head = createNode(-1, -1);
+    obj->tail = createNode(-1, -1);
+    obj->head->next = obj->tail;
+    obj->tail->prev = obj->head;
+    
+    // Clear the hash map array pointers to NULL
+    for (int i = 0; i <= 10000; i++) {
+        obj->hashMap[i] = NULL;
+    }
+    
+    return obj;
+}
+
+// Get the value of a key if it exists
+int lRUCacheGet(LRUCache* obj, int key) {
+    Node* node = obj->hashMap[key];
+    if (node == NULL) {
+        return -1;
+    }
+    // Since it was accessed, move it to the head
+    moveToHead(obj, node);
+    return node->value;
+}
+
+// Update or insert a key-value pair
+void lRUCachePut(LRUCache* obj, int key, int value) {
+    Node* node = obj->hashMap[key];
+    
+    if (node != NULL) {
+        // Key exists: update its value and bring it to the head
+        node->value = value;
+        moveToHead(obj, node);
+    } else {
+        // Key does not exist: create a new node
+        Node* newNode = createNode(key, value);
+        obj->hashMap[key] = newNode;
+        addToHead(obj, newNode);
+        obj->size++;
+        
+        // Check if capacity is exceeded
+        if (obj->size > obj->capacity) {
+            // Evict the least recently used node (just before the dummy tail)
+            Node* lruNode = obj->tail->prev;
+            removeNode(lruNode);
+            obj->hashMap[lruNode->key] = NULL; // Evict from hash map
+            free(lruNode);                     // Free memory
+            obj->size--;
+        }
+    }
+}
+
+// Free all allocated memory blocks
+void lRUCacheFree(LRUCache* obj) {
+    Node* curr = obj->head;
+    while (curr != NULL) {
+        Node* nextNode = curr->next;
+        free(curr);
+        curr = nextNode;
+    }
+    free(obj);
+}
