@@ -1,0 +1,75 @@
+#include <pthread.h>
+#include <stdbool.h>
+#include <stdlib.h>
+
+// Explicitly declare LeetCode's background testing routines to fix compile errors
+void releaseHydrogen();
+void releaseOxygen();
+
+typedef struct {
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    int h_count; // Tracks Hydrogen atoms in the current batch (max 2)
+    int o_count; // Tracks Oxygen atoms in the current batch (max 1)
+} H2O;
+
+H2O* h2oCreate() {
+    H2O* obj = (H2O*)malloc(sizeof(H2O));
+    pthread_mutex_init(&obj->mutex, NULL);
+    pthread_cond_init(&obj->cond, NULL);
+    obj->h_count = 0;
+    obj->o_count = 0;
+    return obj;
+}
+
+void hydrogen(H2O* obj) {
+    pthread_mutex_lock(&obj->mutex);
+    
+    // Wait if the current molecule already has 2 Hydrogen atoms
+    while (obj->h_count == 2) {
+        pthread_cond_wait(&obj->cond, &obj->mutex);
+    }
+    
+    // releaseHydrogen() outputs "H". Do not change or remove this line.
+    releaseHydrogen();
+    obj->h_count++;
+    
+    // If a full molecule is ready (2 H and 1 O), reset counts for the next molecule
+    if (obj->h_count == 2 && obj->o_count == 1) {
+        obj->h_count = 0;
+        obj->o_count = 0;
+    }
+    
+    // Wake up other waiting threads to check if they can proceed
+    pthread_cond_broadcast(&obj->cond);
+    pthread_mutex_unlock(&obj->mutex);
+}
+
+void oxygen(H2O* obj) {
+    pthread_mutex_lock(&obj->mutex);
+    
+    // Wait if the current molecule already has 1 Oxygen atom
+    while (obj->o_count == 1) {
+        pthread_cond_wait(&obj->cond, &obj->mutex);
+    }
+    
+    // releaseOxygen() outputs "O". Do not change or remove this line.
+    releaseOxygen();
+    obj->o_count++;
+    
+    // If a full molecule is ready (2 H and 1 O), reset counts for the next molecule
+    if (obj->h_count == 2 && obj->o_count == 1) {
+        obj->h_count = 0;
+        obj->o_count = 0;
+    }
+    
+    // Wake up other waiting threads to check if they can proceed
+    pthread_cond_broadcast(&obj->cond);
+    pthread_mutex_unlock(&obj->mutex);
+}
+
+void h2oFree(H2O* obj) {
+    pthread_mutex_destroy(&obj->mutex);
+    pthread_cond_destroy(&obj->cond);
+    free(obj);
+}
